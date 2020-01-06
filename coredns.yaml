@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns
+data:
+  Corefile: |-
+    . {
+        reload
+        log
+        errors
+        ready
+        health
+        loadbalance
+        cache 5
+        kubernetes cluster.local {
+            namespaces {$NAMESPACE}
+        }
+        k8s_external {$DOMAIN}
+        rewrite {
+            name regex ^([^.]+)\.{$DOMAIN}\.$ {1}.{$NAMESPACE}.{$DOMAIN}.
+            answer name ^([^.]+)\.{$NAMESPACE}\.{$DOMAIN}\.$ {1}.{$DOMAIN}.
+        }
+    }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coredns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coredns
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - services
+  - pods
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coredns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: coredns
+subjects:
+- kind: ServiceAccount
+  name: coredns
+  namespace: default
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coredns
+spec:
+  selector:
+    matchLabels:
+      name: coredns
+  template:
+    metadata:
+      labels:
+        name: coredns
+    spec:
+      containers:
+      - name: coredns
+        image: coredns/coredns:1.6.6
+        args: ["-conf", "/etc/coredns/Corefile"]
+        env:
+        - name: NAMESPACE
+          value: default
+        - name: DOMAIN
+          value: example.org
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/coredns
+        ports:
+        - containerPort: 53
+          name: dns
+          protocol: UDP
+          hostPort: 53
+        - containerPort: 53
+          name: dns-tcp
+          protocol: TCP
+          hostPort: 53
+        - containerPort: 9153
+          name: metrics
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8181
+            scheme: HTTP
+      volumes:
+      - name: config-volume
+        configMap:
+          name: coredns
+          items:
+          - key: Corefile
+            path: Corefile
+      serviceAccountName: coredns

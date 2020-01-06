@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dnslb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      name: dnslb
+  template:
+    metadata:
+      labels:
+        name: dnslb
+    spec:
+      containers:
+      - image: loadworks/dnslb:v0.1.0
+        name: dnslb
+      serviceAccountName: dnslb
