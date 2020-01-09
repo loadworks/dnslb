@@ -1,0 +1,15 @@
+name: Build
+on:
+  push:
+    tags:
+    - v*
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+    - name: Create Github Package
+      uses: matootie/github-docker@v2.0.0
+      with:
+        accessToken: ${{ secrets.GITHUB_TOKEN }}
