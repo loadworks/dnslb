@@ -1,6 +1,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  namespace: dnslb
   name: dnslb
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -35,4 +36,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: dnslb
-  namespace: default
+  namespace: dnslb

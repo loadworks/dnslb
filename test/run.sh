@@ -6,6 +6,8 @@ kind create cluster --config=cluster.yaml --wait 5m
 kubectl wait nodes --all --for condition=ready --timeout=180s
 kubectl get nodes -o wide
 
+kubectl create namespace dnslb
+
 kubectl apply -f ../dnslb-auth.yaml
 if [ "$IMAGE" ]
 then
@@ -21,10 +23,10 @@ EOF
 else
   kubectl apply -f ../dnslb-deploy.yaml
 fi
-kubectl wait deployment dnslb --for condition=available --timeout=180s
+kubectl -n dnslb wait deployment dnslb --for condition=available --timeout=180s
 
 kubectl apply -f ../coredns.yaml
-kubectl wait pod --selector name=coredns --for condition=ready --timeout=180s
+kubectl -n dnslb wait pod --selector name=coredns --for condition=ready --timeout=180s
 
 if [ "$MANUAL" ]
 then

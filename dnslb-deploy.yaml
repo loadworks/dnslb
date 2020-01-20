@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: dnslb
   name: dnslb
 spec:
   replicas: 1

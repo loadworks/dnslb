@@ -19,6 +19,7 @@ _CoreDNS_ doesn't actually provide true load balancing. It can only serve multip
 
 To deploy _dnslb_ to your cluster in the `default` namespace:
 ```bash
+kubectl create namespace dnslb
 # create the necessary RBAC resources:
 kubectl apply -f dnslb-auth.yaml
 # create the Deployment:
