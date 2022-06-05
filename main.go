@@ -15,8 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +34,7 @@ func main() {
 	sync := flag.Int64("sync", 0, "forced reconciliation interval in seconds, 0 to disable")
 	flag.Parse()
 
-	logf.SetLogger(zap.Logger(true))
+	logf.SetLogger(zap.New())
 	log.Info("starting")
 
 	duration := time.Duration(*sync) * time.Second
@@ -50,10 +48,10 @@ func main() {
 	}
 
 	idx := mgr.GetFieldIndexer()
-	idx.IndexField(&corev1.Service{}, "spec.type", func(o runtime.Object) []string {
+	idx.IndexField(context.TODO(), &corev1.Service{}, "spec.type", func(o client.Object) []string {
 		return []string{string(o.(*corev1.Service).Spec.Type)}
 	})
-	idx.IndexField(&corev1.Pod{}, "status.phase", func(o runtime.Object) []string {
+	idx.IndexField(context.TODO(), &corev1.Pod{}, "status.phase", func(o client.Object) []string {
 		return []string{string(o.(*corev1.Pod).Status.Phase)}
 	})
 
@@ -61,13 +59,13 @@ func main() {
 		ControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return isRelevant(e.Meta, e.Object)
+				return isRelevant(e.Object)
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
-				return isRelevant(e.Meta, e.Object)
+				return isRelevant(e.Object)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				if isRelevant(e.MetaOld, e.ObjectOld) || isRelevant(e.MetaNew, e.ObjectNew) {
+				if isRelevant(e.ObjectOld) || isRelevant(e.ObjectNew) {
 					// select only the relevant changes
 					switch old := e.ObjectOld.(type) {
 					case *corev1.Service:
@@ -86,13 +84,13 @@ func main() {
 				return false
 			},
 			GenericFunc: func(e event.GenericEvent) bool {
-				return isRelevant(e.Meta, e.Object)
+				return isRelevant(e.Object)
 			},
 		}).
 		For(&corev1.Service{}).
-		Watches(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestsFromMapFunc{
-			ToRequests: handler.ToRequestsFunc(func(a handler.MapObject) []reconcile.Request {
-				pod := a.Object.(*corev1.Pod)
+		Watches(&source.Kind{Type: &corev1.Pod{}}, handler.EnqueueRequestsFromMapFunc(
+			func(a client.Object) []reconcile.Request {
+				pod := a.(*corev1.Pod)
 				log.Info("pod watch", "name", pod.Name)
 				reqs := []reconcile.Request{}
 				// get LB services from the pod's namespace
@@ -123,11 +121,11 @@ func main() {
 					}})
 				}
 				return reqs
-			}),
-		}).
-		Watches(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestsFromMapFunc{
-			ToRequests: handler.ToRequestsFunc(func(a handler.MapObject) []reconcile.Request {
-				node := a.Object.(*corev1.Node)
+			},
+		)).
+		Watches(&source.Kind{Type: &corev1.Node{}}, handler.EnqueueRequestsFromMapFunc(
+			func(a client.Object) []reconcile.Request {
+				node := a.(*corev1.Node)
 				log.Info("node watch", "name", node.Name)
 				reqs := []reconcile.Request{}
 				// get all LB services
@@ -148,8 +146,8 @@ func main() {
 					}})
 				}
 				return reqs
-			}),
-		}).
+			},
+		)).
 		Complete(&ServiceReconciler{})
 	if err != nil {
 		log.Error(err, "could not create controller")
@@ -163,7 +161,7 @@ func main() {
 }
 
 // isRelevant checks if the object should be watched/reconciled
-func isRelevant(meta metav1.Object, object runtime.Object) bool {
+func isRelevant(object client.Object) bool {
 	switch obj := object.(type) {
 	case *corev1.Service:
 		return obj.Spec.Type == corev1.ServiceTypeLoadBalancer
@@ -182,10 +180,10 @@ type ServiceReconciler struct {
 }
 
 // Reconcile updates the status of Service objects
-func (a *ServiceReconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+func (a *ServiceReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	// get the service
 	svc := &corev1.Service{}
-	err := a.Get(context.TODO(), req.NamespacedName, svc)
+	err := a.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -196,7 +194,7 @@ func (a *ServiceReconciler) Reconcile(req reconcile.Request) (reconcile.Result, 
 		// list the relevant pods
 		pods := &corev1.PodList{}
 		err = a.List(
-			context.TODO(),
+			ctx,
 			pods,
 			client.InNamespace(req.Namespace),
 			client.MatchingLabels(svc.Spec.Selector),
@@ -216,7 +214,7 @@ func (a *ServiceReconciler) Reconcile(req reconcile.Request) (reconcile.Result, 
 
 		// get all nodes
 		nodes := &corev1.NodeList{}
-		err = a.List(context.TODO(), nodes)
+		err = a.List(ctx, nodes)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -238,7 +236,7 @@ func (a *ServiceReconciler) Reconcile(req reconcile.Request) (reconcile.Result, 
 	}
 
 	log.Info("updating service", "status", svc.Status)
-	err = a.Status().Update(context.TODO(), svc)
+	err = a.Status().Update(ctx, svc)
 	return reconcile.Result{}, err
 }
 
