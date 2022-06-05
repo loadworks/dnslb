@@ -3,13 +3,30 @@ on:
   push:
     tags:
     - v*
+env:
+  IMAGE: loadworks/dnslb
+  PUSH: ${{ github.event_name != 'pull_request' }}
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
-    - name: Create Github Package
-      uses: matootie/github-docker@v2.0.0
+      uses: actions/checkout@v3
+    - name: Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v4
       with:
-        accessToken: ${{ secrets.GITHUB_TOKEN }}
+        images: ${{ env.IMAGE }}
+    - name: Log into Docker Hub
+      if: ${{ env.PUSH }}
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_USER }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+    - name: Build & Push
+      uses: docker/build-push-action@v3
+      with:
+        push: ${{ env.PUSH }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
