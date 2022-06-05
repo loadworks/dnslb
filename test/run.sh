@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-set -xe
+set -xeo pipefail
 
-kind create cluster --config=cluster.yaml --wait 5m
+kind create cluster --config=kind.yaml --wait 5m
 kubectl wait nodes --all --for condition=ready --timeout=180s
 kubectl get nodes -o wide
 

@@ -16,6 +16,6 @@ spec:
         name: dnslb
     spec:
       containers:
-      - image: loadworks/dnslb:v0.1.0
+      - image: loadworks/dnslb
         name: dnslb
       serviceAccountName: dnslb
